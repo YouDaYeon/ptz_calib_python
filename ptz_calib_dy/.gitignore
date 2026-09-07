@@ -1,0 +1,34 @@
+# Secrets (camera RTSP / ONVIF credentials)
+.env
+.env.*
+!.env.example
+
+# Virtualenvs
+.venv/
+.venv-match/
+venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# SuperPoint / SuperGlue checkpoints
+*.pth
+*.pt
+**/models/weights/
+
+# Captured frames, matches, survey imagery (~277MB)
+data/
+
+# Solver / eval run output
+output/
+output-synthetic/
+output-worldcup14/
+output-*/

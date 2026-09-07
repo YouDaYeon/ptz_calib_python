@@ -1,0 +1,59 @@
+# Secrets (camera RTSP / ONVIF credentials)
+.env
+.env.*
+!.env.example
+
+# Local editor / OS / AI tooling
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+.idea/
+.claude/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+sdist/
+wheels/
+.venv/
+.venv*/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# SuperPoint / SuperGlue checkpoints (download separately)
+*.pth
+*.pt
+*.ckpt
+*.onnx
+**/models/weights/
+
+# Captured datasets, images, SuperPoint dumps
+ptz_calib_dy/data/
+PTZ-Calib/data/
+*.jpg
+*.jpeg
+*.png
+*.bmp
+*.tif
+*.tiff
+*.npy
+*.npz
+*.mp4
+*.avi
+
+# Solver / eval run output
+output/
+output-*/
+
+# Upstream C++ tree (nested .git + ~10GB of data/3rdparty/build).
+# Adding it from here would only record a broken gitlink, not the sources.
+PTZ-Calib/

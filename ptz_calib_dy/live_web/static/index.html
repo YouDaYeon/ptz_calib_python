@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PTZ 실시간 2D-3D 검증</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <h1>PTZ 실시간 2D&nbsp;→&nbsp;3D 검증</h1>
+  <div class="pills">
+    <span class="pill" id="pill-stream">RTSP …</span>
+    <span class="pill" id="pill-engine">엔진 …</span>
+    <span class="pill" id="pill-calib">미캘리브레이션</span>
+    <span class="pill" id="pill-drift" hidden>화면 정지</span>
+  </div>
+</header>
+
+<main>
+  <section class="viewer-col">
+    <div class="toolbar">
+      <button id="btn-calib" class="primary">캘리브레이션</button>
+      <button id="btn-freeze">캡처해서 고정</button>
+      <button id="btn-live" disabled>라이브로 복귀</button>
+      <label class="chk" title="화면이 움직이면 자동으로 다시 캘리브레이션합니다">
+        <input type="checkbox" id="auto-move" checked> 이동 시 자동</label>
+      <label class="chk"><input type="checkbox" id="auto"> 주기적 자동</label>
+      <label class="num"><input type="number" id="auto-sec" value="5" min="2" max="60" step="1"> 초</label>
+      <span class="spacer"></span>
+      <label class="num">평면 Z <input type="number" id="plane-z" value="0" step="0.05"> m</label>
+    </div>
+
+    <div class="stage" id="stage">
+      <img id="live" src="/stream.mjpg" alt="live view">
+      <canvas id="frozen"></canvas>
+      <canvas id="overlay"></canvas>
+      <div id="badge" class="badge">LIVE</div>
+      <div id="hint" class="hint">캘리브레이션 후 영상을 클릭하면 3D 좌표가 나옵니다</div>
+      <canvas id="loupe" width="150" height="150"></canvas>
+    </div>
+
+    <div class="toolbar sub">
+      <label class="chk"><input type="checkbox" id="show-survey" checked> 서베이 점 투영</label>
+      <label class="chk"><input type="checkbox" id="show-horizon" checked> 지평선</label>
+      <label class="chk"><input type="checkbox" id="show-kpts"> 매칭 키포인트</label>
+      <label class="chk"><input type="checkbox" id="show-grid" checked> 바닥 격자(1&nbsp;m)</label>
+      <span class="spacer"></span>
+      <button id="btn-clear">클릭 지우기</button>
+      <button id="btn-copy">CSV 복사</button>
+    </div>
+
+    <div class="card">
+      <h2>클릭한 점</h2>
+      <div class="tablewrap">
+        <table id="pts">
+          <thead><tr>
+            <th>#</th><th>2D (u, v) px</th><th>3D (X, Y, Z) m</th>
+            <th title="월드 원점 (0, 0, 0)으로부터의 거리">원점 거리</th>
+            <th title="카메라 중심으로부터의 3D 직선거리">카메라 거리</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <p class="empty" id="pts-empty">아직 클릭한 점이 없습니다.</p>
+    </div>
+  </section>
+
+  <section class="panel-col">
+    <div class="card" id="ptz-card" hidden>
+      <h2>PTZ 제어</h2>
+      <div class="kv" id="ptz-now">…</div>
+
+      <div class="ptz-form">
+        <label class="num">Pan <input type="number" id="ptz-pan" step="0.1"><span class="u" id="ptz-u-pan">°</span></label>
+        <label class="num">Tilt <input type="number" id="ptz-tilt" step="0.1"><span class="u" id="ptz-u-tilt">°</span></label>
+        <label class="num">Zoom <input type="number" id="ptz-zoom" step="0.1"><span class="u" id="ptz-u-zoom">×</span></label>
+        <button id="ptz-move" class="primary">이동</button>
+        <button id="ptz-here" title="입력칸을 현재 자세로 채웁니다">현재값</button>
+      </div>
+
+      <div class="ptz-form">
+        <label class="num">프리셋
+          <select id="ptz-preset"><option value="">…</option></select></label>
+        <label class="num"><input type="number" id="ptz-preset-token" min="1" max="256" step="1" placeholder="번호"></label>
+        <button id="ptz-goto">프리셋 이동</button>
+        <span class="spacer"></span>
+        <button id="ptz-stop" title="진행 중인 이동을 멈춥니다">정지</button>
+      </div>
+
+      <div class="ptz-form">
+        <label class="chk" title="카메라가 실제로 주고받는 ONVIF 정규화값으로 입력합니다">
+          <input type="checkbox" id="ptz-raw"> 정규화 단위</label>
+        <label class="num">속도 <input type="number" id="ptz-speed" min="0.05" max="1" step="0.05" value="0.5"></label>
+        <span class="spacer"></span>
+        <span class="dim" id="ptz-msg"></span>
+      </div>
+
+      <p class="legend ptz-note">
+        이동하면 캘리브레이션이 무효가 됩니다 — <b>[이동 시 자동]</b>이 켜져 있으면 카메라가
+        멈추는 즉시 다시 풀립니다. 각도·배율은 카메라 정규화값을 환산한 값입니다
+        (<code>pan = (x+1)×180</code>, <code>tilt = 43.5 − 46.5y</code>, <code>zoom = 1 + 22z</code>) —
+        프리셋 3·4·11로 실측해 맞춘 식입니다.
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>평면도 (X-Y, m)</h2>
+      <canvas id="bev" width="460" height="330"></canvas>
+      <p class="legend">
+        <span class="k cam"></span>카메라
+        <span class="k pt"></span>클릭 점
+        <span class="k sv"></span>서베이 점
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>재투영 오차 — holdout 2D→3D</h2>
+      <div class="bignum"><span id="hd-num">—</span><span class="unit">m</span></div>
+      <div class="bigsub" id="hd-sub">2D 픽셀을 입력하거나 화면을 클릭하세요</div>
+
+      <div class="hd-form">
+        <label class="chk" title="켜 두면 영상 클릭이 holdout 측정으로 들어갑니다">
+          <input type="checkbox" id="hd-pick"> 화면 클릭으로 측정</label>
+        <label class="num">대상
+          <select id="hd-target"><option value="">자동 (최근접)</option></select></label>
+        <label class="num">u <input type="number" id="hd-u" step="0.1" placeholder="px"></label>
+        <label class="num">v <input type="number" id="hd-v" step="0.1" placeholder="px"></label>
+        <button id="hd-add">측정 추가</button>
+        <span class="spacer"></span>
+        <button id="hd-clear">지우기</button>
+        <button id="hd-copy">CSV 복사</button>
+      </div>
+
+      <div id="hd-body" class="kv"></div>
+      <div class="tablewrap">
+        <table id="hd-pts" hidden>
+          <thead><tr>
+            <th>#</th>
+            <th title="서베이 holdout 점. '자동'은 예측 3D에 가장 가까운 점을 고른다">대상</th>
+            <th title="사용자가 입력/클릭한 2D 픽셀">클릭 2D px</th>
+            <th title="그 픽셀의 광선을 Z = GT의 Z 평면과 교차시킨 3D">예측 3D (X, Y) m</th>
+            <th title="예측 3D와 서베이 GT 3D의 거리">오차 m</th>
+            <th title="GT 3D를 현재 해로 투영한 픽셀과 클릭 픽셀의 거리">오차 px</th>
+            <th></th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <p class="legend hd-note">
+        클릭한 <b>2D 픽셀</b>의 광선을 <code>Z = GT의 Z</code> 평면과 교차시켜 3D를 예측하고
+        서베이 GT 3D와 비교합니다 — <code>eval_own.py</code>의 holdout 미터 오차와 같은 계산입니다.
+        GT를 투영해 얻은 픽셀은 쓸 수 없습니다(왕복이 항등이라 항상 0.000 m).
+        오차는 <b>클릭 정확도까지 포함</b>하므로 분홍 십자 중심을 정확히 찍으세요 — 정지 프레임의 돋보기가 도움이 됩니다.
+        기준: 오프라인 georef+dist 해의 holdout 9점 RMSE <b>0.078 m</b>, 최대 0.110 m.
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>캘리브레이션</h2>
+      <div id="calib-body" class="kv">아직 실행하지 않았습니다.</div>
+      <img id="refthumb" alt="matched reference" hidden>
+    </div>
+
+    <div class="card">
+      <h2>설정</h2>
+      <div id="cfg-body" class="kv">…</div>
+    </div>
+  </section>
+</main>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
